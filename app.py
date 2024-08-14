@@ -330,7 +330,7 @@ if st.session_state.scenario_step > num_scenarios:
             with cols[i]:
                 st.markdown(f"Price for Customer {i + 1}")
                 st.markdown(f"""
-                    <div style="margin: 10px; padding: 10px; background-color: #FF8343; border-radius: 20px; color: white; text-align: center; width: 120px; height: 70px; display: flex; align-items: center; justify-content: center;">
+                    <div style="margin: 10px; padding: 10px; background-color: #03346E; border-radius: 20px; color: white; text-align: center; width: 120px; height: 70px; display: flex; align-items: center; justify-content: center;">
                         <h2 style="font-size: 24px; color: white; margin: 0;">${optimized_price:,.2f}</h2>
                     </div>
                     """, unsafe_allow_html=True)
