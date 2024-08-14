@@ -2,6 +2,6 @@ flask
 scikit-learn
 pandas
 prophet
-numpy==1.24.3
+numpy
 streamlit
 python3.12-distutils
