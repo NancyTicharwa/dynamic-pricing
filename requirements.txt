@@ -4,5 +4,4 @@ pandas
 prophet
 numpy==1.24.3
 streamlit
-
-#RUN :  pip install -r requirements.txt
+python3.10-distutils
