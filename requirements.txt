@@ -4,3 +4,4 @@ pandas
 prophet
 numpy
 streamlit
+plotly
