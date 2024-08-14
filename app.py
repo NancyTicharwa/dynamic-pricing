@@ -4,12 +4,13 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
+np.float_ = np.float64
 from prophet import Prophet
 import pickle
 import os
 import plotly.graph_objs as go
 import plotly.express as px
-np.float_ = np.float64
+
 
 #Problem Statement : https://docs.google.com/document/d/1bnKJLT-WC6Hz5--kl00IHjgkeFiXid0u5kuydSq69ZI/edit
 # Load the dataset
