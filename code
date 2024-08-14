@@ -1,0 +1,258 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.model_selection import train_test_split
+from prophet import Prophet
+
+# Load the dataset
+df = pd.read_csv('processed_airline_data_sample.csv')
+
+# Define categorical features globally
+categorical_features = ['Flight_Number', 'Departure_Airport',
+                        'Arrival_Airport', 'Travel_Class',
+                        'Booking_Channel', 'Fare_Class',
+                        'Holiday_Name', 'Holiday_Type',
+                        'Weather_Condition', 'Airline']
+
+
+# Preprocess the data
+def preprocess_data(df):
+    pricing_features = ['Flight_Number', 'Departure_Airport', 'Arrival_Airport',
+                        'Booking_Channel', 'Age', 'Travel_Class', 'Fare_Class',
+                        'GDP_Growth_Rate', 'Inflation_Rate', 'Unemployment_Rate',
+                        'Holiday_Name', 'Holiday_Type', 'Holiday_Indicator',
+                        'Weather_Condition', 'Temperature', 'Wind_Speed',
+                        'Precipitation', 'Departure_Delay', 'Cancellation',
+                        'Competitor_Price', 'Booking_Lead_Time', 'Airline']
+
+    reference_date = pd.to_datetime(df['Flight_Date']).min()
+    df['Flight_Date_Numeric'] = (pd.to_datetime(df['Flight_Date']) - reference_date).dt.days
+    reference_date_booking = pd.to_datetime(df['Booking_Date']).min()
+    df['Booking_Date_Numeric'] = (pd.to_datetime(df['Booking_Date']) - reference_date_booking).dt.days
+
+    df['Flight_Time_Minutes'] = df['Flight_Time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
+
+    df['Holiday_Date_Numeric'] = (pd.to_datetime(df['Holiday_Date']) - reference_date).dt.days
+
+    pricing_features.extend(
+        ['Flight_Date_Numeric', 'Booking_Date_Numeric', 'Flight_Time_Minutes', 'Holiday_Date_Numeric'])
+
+    X = df[pricing_features]
+    y = df['Ticket_Price']
+
+    ohe = OneHotEncoder(handle_unknown='ignore')
+    X_encoded = pd.DataFrame(ohe.fit_transform(X[categorical_features]).toarray())
+    encoded_feature_names = ohe.get_feature_names_out(categorical_features)
+    X_encoded.columns = encoded_feature_names
+
+    X = pd.concat([X.drop(categorical_features, axis=1), X_encoded], axis=1)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    return X_train, X_test, y_train, y_test, ohe, pricing_features, df, reference_date, reference_date_booking
+
+
+# Train the RandomForestRegressor model
+def train_pricing_model(X_train, y_train):
+    pricing_model = RandomForestRegressor(n_estimators=100, random_state=42)
+    pricing_model.fit(X_train, y_train)
+    return pricing_model
+
+
+# Train the Prophet model
+def train_prophet_model(df):
+    prophet_df = df[['Flight_Date', 'Ticket_Price']]
+    prophet_df.columns = ['ds', 'y']
+    prophet_model = Prophet()
+    prophet_model.fit(prophet_df)
+    return prophet_model
+
+
+# Prepare the data
+X_train, X_test, y_train, y_test, ohe, pricing_features, df, reference_date, reference_date_booking = preprocess_data(
+    df)
+
+# Train models
+pricing_model = train_pricing_model(X_train, y_train)
+prophet_model = train_prophet_model(df)
+
+# Define airport names and codes
+airport_mapping = {
+    'JFK': 'John F. Kennedy International Airport',
+    'LAX': 'Los Angeles International Airport',
+    'ORD': "O'Hare International Airport",
+    'ATL': 'Hartsfield-Jackson Atlanta International Airport',
+    'DFW': 'Dallas/Fort Worth International Airport',
+    'SFO': 'San Francisco International Airport',
+    'MIA': 'Miami International Airport',
+    'SEA': 'Seattle-Tacoma International Airport',
+    'BOS': 'Logan International Airport',
+    'DEN': 'Denver International Airport'
+}
+
+departure_airports = [f"{name} ({code})" for code, name in airport_mapping.items()]
+arrival_airports = departure_airports
+
+# Sidebar for inputs
+st.sidebar.title("Flight Details")
+
+# Move No. Of Scenarios slider under the sidebar title
+st.sidebar.markdown("### No. Of Scenarios")
+num_scenarios = st.sidebar.slider("", 1, 5, 3)
+
+# Unique flight numbers for dropdown
+flight_number = st.sidebar.selectbox("Flight Number", df['Flight_Number'].unique())
+
+# Display the respective airline name
+airline_name = df[df['Flight_Number'] == flight_number]['Airline'].iloc[0]
+st.sidebar.write(f"**Airline Name:** {airline_name}")
+
+# Move Travel Class and Fare Class to the sidebar
+travel_class = st.sidebar.selectbox("Travel Class", ["Economy", "Business", "First Class"])
+fare_class = st.sidebar.selectbox("Fare Class", ["Discount", "Regular", "Premium"])
+
+holiday_name = st.sidebar.selectbox("Holiday Name", ["None", "Labor Day", "Christmas", "New Year's Day"])
+booking_channel = st.sidebar.selectbox("Booking Channel", ["Online", "Travel Agent", "Mobile App"])
+holiday_indicator = st.sidebar.checkbox("Holiday Indicator", value=False)
+lead_time = st.sidebar.slider("Booking Lead Time (days)", 0, 365, 30)
+weather_condition = st.sidebar.selectbox("Weather Condition", ["Clear", "Rain", "Snow", "Fog"])
+temperature = st.sidebar.slider("Temperature (Celsius)", -10.0, 40.0, 25.0)
+wind_speed = st.sidebar.slider("Wind Speed (km/h)", 0.0, 50.0, 10.0)
+competitor_price = st.sidebar.slider("Competitor Price ($)", 100.0, 2000.0, 500.0)
+gdp_growth_rate = st.sidebar.slider("GDP Growth Rate (%)", 0.0, 10.0, 2.5)
+inflation_rate = st.sidebar.slider("Inflation Rate (%)", 0.0, 10.0, 1.8)
+unemployment_rate = st.sidebar.slider("Unemployment Rate (%)", 0.0, 10.0, 4.3)
+
+# Main content layout
+st.title("Dynamic Pricing Model")
+
+# Display departure and arrival inputs under the main title
+st.markdown("### Flight Details")
+col1, col2 = st.columns(2)
+
+# Move existing departure and arrival airport inputs from sidebar to main page
+with col1:
+    departure_airport = st.selectbox("Departure Airport", departure_airports)
+
+with col2:
+    arrival_airport = st.selectbox("Arrival Airport", arrival_airports)
+
+# Display date and time inputs on the main page
+col3, col4, col5, col6 = st.columns(4)
+
+with col3:
+    booking_date = st.date_input("Booking Date", pd.to_datetime("2023-07-15"))
+
+with col4:
+    flight_date = st.date_input("Flight Date", pd.to_datetime("2023-08-15"))
+
+with col5:
+    flight_time = st.time_input("Flight Time", pd.to_datetime('10:00').time())
+
+with col6:
+    booking_time = st.time_input("Booking Time", pd.to_datetime('09:00').time())
+
+st.image("https://www.southwest.com/assets/images/brand/plane/hero/737-max-8.jpg", use_column_width=True)
+st.markdown("### Now Analyzing Your Trip\nA new way of pricing for airlines")
+
+# Scenario results section
+st.markdown("## Results")
+
+# List to store results for each scenario
+pricing_results = []
+forecast_results = []
+
+# Create inputs for each scenario
+for i in range(num_scenarios):
+    st.markdown(f"### Scenario {i + 1}")
+
+    # Using the current inputs to create scenario-specific predictions
+    with st.expander(f"Adjust Inputs for Scenario {i + 1}"):
+        # Use the existing inputs for each scenario
+        scenario_departure_airport = st.selectbox(f"Departure Airport (Scenario {i + 1})", departure_airports,
+                                                  index=departure_airports.index(departure_airport))
+        scenario_arrival_airport = st.selectbox(f"Arrival Airport (Scenario {i + 1})", arrival_airports,
+                                                index=arrival_airports.index(arrival_airport))
+        scenario_travel_class = st.selectbox(f"Travel Class (Scenario {i + 1})", ["Economy", "Business", "First Class"],
+                                             index=["Economy", "Business", "First Class"].index(travel_class))
+        scenario_fare_class = st.selectbox(f"Fare Class (Scenario {i + 1})", ["Discount", "Regular", "Premium"],
+                                           index=["Discount", "Regular", "Premium"].index(fare_class))
+        scenario_flight_date = st.date_input(f"Flight Date (Scenario {i + 1})", flight_date)
+        scenario_flight_time = st.time_input(f"Flight Time (Scenario {i + 1})", flight_time)
+
+        # Prepare input data for the scenario
+        user_input = {
+            'Flight_Number': flight_number,
+            'Departure_Airport': scenario_departure_airport.split('(')[-1].strip(')'),
+            'Arrival_Airport': scenario_arrival_airport.split('(')[-1].strip(')'),
+            'Booking_Channel': booking_channel,
+            'Age': 35,  # Example static value
+            'Travel_Class': scenario_travel_class,
+            'Fare_Class': scenario_fare_class,
+            'GDP_Growth_Rate': gdp_growth_rate,
+            'Inflation_Rate': inflation_rate,
+            'Unemployment_Rate': unemployment_rate,
+            'Holiday_Name': holiday_name,
+            'Holiday_Type': 'Public Holiday',
+            'Holiday_Indicator': holiday_indicator,
+            'Weather_Condition': weather_condition,
+            'Temperature': temperature,
+            'Wind_Speed': wind_speed,
+            'Precipitation': 0,  # Example static value
+            'Departure_Delay': 15,  # Example static value
+            'Cancellation': 0,  # Example static value
+            'Competitor_Price': competitor_price,
+            'Booking_Lead_Time': lead_time,
+            'Airline': airline_name,
+        }
+
+        user_input_df = pd.DataFrame([user_input])
+
+        # Add the numerical features that were processed during training
+        user_input_df['Flight_Date_Numeric'] = (pd.to_datetime(scenario_flight_date) - reference_date).days
+        user_input_df['Booking_Date_Numeric'] = (pd.to_datetime(booking_date) - reference_date_booking).days
+        user_input_df['Flight_Time_Minutes'] = int(scenario_flight_time.strftime('%H')) * 60 + int(
+            scenario_flight_time.strftime('%M'))
+        user_input_df['Holiday_Date_Numeric'] = 0  # Set it accordingly
+
+        # Encode categorical features
+        user_input_encoded = pd.DataFrame(ohe.transform(user_input_df[categorical_features]).toarray())
+        encoded_feature_names = ohe.get_feature_names_out(categorical_features)
+        user_input_encoded.columns = encoded_feature_names
+
+        # Concatenate numerical and one-hot encoded features
+        X_prepared = pd.concat([user_input_df.drop(categorical_features, axis=1), user_input_encoded], axis=1)
+
+        # Predict the optimized price
+        optimized_price = pricing_model.predict(X_prepared)[0]
+        pricing_results.append(optimized_price)
+
+        # Forecast demand using the Prophet model
+        future = pd.DataFrame({'ds': [scenario_flight_date]})
+        forecast = prophet_model.predict(future)
+        forecasted_demand = forecast['yhat'].iloc[0]
+        forecast_results.append(forecasted_demand)
+
+# Display scenario results
+cols = st.columns(num_scenarios)
+for i, col in enumerate(cols):
+    with col:
+        st.markdown(f"### Scenario {i + 1}")
+        st.write(f"**Optimized Ticket Price:** ${pricing_results[i]:.2f}")
+        st.write(f"**Forecasted Demand:** {forecast_results[i]:.2f} bookings")
+
+# Footer or additional content
+st.write("---")
+st.write("### Additional Information")
+st.write("Adjust the input values on the left sidebar to see how different factors affect airline ticket prices.")
+
+
+-------------
+
+        st.markdown(f"""
+            <div style="margin-top: 20px; padding: 15px; background-color: #00BFFF; border-radius: 10px; color: white; text-align: center;">
+                <h5>Forecasted Demand for:<span style="color: white;">{forecast['ds'].iloc[0]} </span>is : <span style="color: white;">{forecasted_demand:.2f}</span> bookings</h5>
+            </div>
+            """, unsafe_allow_html=True)
