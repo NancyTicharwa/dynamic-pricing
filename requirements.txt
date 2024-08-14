@@ -4,4 +4,3 @@ pandas
 prophet
 numpy
 streamlit
-python3.12-distutils
