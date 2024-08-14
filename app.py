@@ -269,7 +269,7 @@ if 0 < st.session_state.scenario_step <= num_scenarios:
     if st.button(f'Confirm Scenario {scenario_number}', key=f"confirm_scenario_{scenario_number}_button"):
         st.session_state.selected_scenarios.append(scenario_data)
         st.session_state.scenario_step += 1  # Move to the next scenario
-        st.experimental_rerun()  # Force a rerun to update the scenario step
+        # st.experimental_rerun()  # Force a rerun to update the scenario step
 
 # Once all scenarios are selected
 if st.session_state.scenario_step > num_scenarios:
